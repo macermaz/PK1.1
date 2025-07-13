@@ -1,49 +1,36 @@
-import { useContext } from 'react';
-import { AppCtx, Msg } from '../context/AppProvider';
-import { classifyQuestion } from '../lib/colorHeuristic';
-import { aiReply } from '../lib/LocalAIResponder';
-interface Ctx {
-  currentProfile: any; // Usa un tipo más específico si es posible
-  currentDifficulty: string;
-  // ... otras propiedades
-}
-/**
- * Hook principal del chat.
- * • Límite 4 prompts por sesión
- * • Colorea cada pregunta (brown / green / blue / purple)
- * • Usa aiReply() para obtener la respuesta del paciente
- */
-export const useChatSession = () => {
-  const {
-    messages,
-    send,
-    promptCount,
-    incPrompt,
-    sessionId,
-    currentProfile,      // <-- añadido al contexto
-    currentDifficulty,   // <-- 'training' | 'medium' | 'hard' | 'realistic'
-  } = useContext(AppCtx);
+import { useState } from 'react';
+import { Patient } from '@/types';
+import { classifyQuestion } from '@/utils/colorHeuristic';
+import { generateAIReply } from '@/services/LocalAIService';
 
-  /** Envía la pregunta del usuario y obtiene respuesta IA */
-  const userSend = async (text: string) => {
+export interface ChatMsg {
+  role: 'user' | 'patient';
+  text: string;
+  color?: string;
+}
+
+export function useChatSession(patient: Patient) {
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [promptCount, setPromptCount] = useState(0);
+
+  const sendUser = async (text: string) => {
     if (promptCount >= 4) return;
 
-    // 1) color y push del mensaje usuario
     const color = classifyQuestion(text, promptCount);
-    await send({ sender: 'user', text, color });
+    setMessages(prev => [...prev, { role: 'user', text, color }]);
+    setPromptCount(c => c + 1);
 
-    incPrompt();
+    const systemCtx = `
+      [PERFIL]
+      Nombre: ${patient.name}. Edad: ${patient.age}.
+      Personalidad: ${patient.personality}.
+      Historia: ${patient.backstory}.
+      Responde como paciente en primera persona. Sé coherente y no menciones que eres una IA.
+    `;
 
-    // 2) respuesta IA (offline o GPT‑4o según dificultad)
-    const replyText = await aiReply(
-      text,
-      messages as Msg[],
-      currentProfile,
-      currentDifficulty,
-    );
-
-    await send({ sender: 'patient', text: replyText });
+    const reply = await generateAIReply(text, systemCtx);
+    setMessages(prev => [...prev, { role: 'patient', text: reply }]);
   };
 
-  return { messages, userSend };
-};
+  return { messages, sendUser, promptCount };
+}
