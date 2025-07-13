@@ -1,0 +1,15 @@
+# Ignorar dependencias y carpetas generadas
+node_modules/
+.next/
+.turbo/
+dist/
+.cache/
+.env
+*.log
+
+# Ignorar archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar VSCode config local
+.vscode/
